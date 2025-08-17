@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image to PDF Converter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+    <style>
+        body {
+            background: linear-gradient(to bottom right, #e0e7ff, #ffffff);
+            min-height: 100vh;
+        }
+        #pdf-viewer {
+            width: 100%;
+            max-width: 800px;
+            height: 600px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+        }
+        .drag-over {
+            border: 2px dashed #4f46e5;
+            background-color: #e0e7ff;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center p-6 font-sans">
+    <header class="text-center mb-8">
+        <h1 class="text-4xl font-bold text-gray-800">Image to PDF Converter</h1>
+        <p class="text-lg text-gray-600 mt-2">Convert your images to PDF easily and download or view them instantly.</p>
+    </header>
+    <main class="w-full max-w-2xl bg-white shadow-lg rounded-lg p-6">
+        <div id="drop-zone" class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center mb-4">
+            <p class="text-gray-600">Drag & drop images here or click to upload</p>
+            <input type="file" id="image-upload" accept="image/*" multiple class="hidden">
+        </div>
+        <div id="image-preview" class="grid grid-cols-2 gap-4 mb-4"></div>
+        <div class="flex justify-center space-x-4">
+            <button id="convert-btn" class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition">Convert to PDF</button>
+            <button id="clear-btn" class="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600 transition">Clear</button>
+        </div>
+        <div id="pdf-output" class="mt-6 hidden">
+            <h2 class="text-xl font-semibold text-gray-800 mb-2">Generated PDF</h2>
+            <div class="flex justify-center space-x-4 mb-4">
+                <button id="download-btn" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition">Download PDF</button>
+                <button id="view-btn" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition">View PDF</button>
+            </div>
+            <iframe id="pdf-viewer" class="hidden"></iframe>
+        </div>
+    </main>
+    <footer class="mt-8 text-gray-600 text-center">
+        <p>&copy; 2025 Image to PDF Converter. All rights reserved.</p>
+    </footer>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const imageUpload = document.getElementById('image-upload');
+        const imagePreview = document.getElementById('image-preview');
+        const convertBtn = document.getElementById('convert-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const downloadBtn = document.getElementById('download-btn');
+        const viewBtn = document.getElementById('view-btn');
+        const pdfOutput = document.getElementById('pdf-output');
+        const pdfViewer = document.getElementById('pdf-viewer');
+        let imageFiles = [];
+
+        // Drag and drop functionality
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drag-over');
+        });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
+            handleFiles(files);
+        });
+        dropZone.addEventListener('click', () => imageUpload.click());
+        imageUpload.addEventListener('change', () => {
+            const files = Array.from(imageUpload.files);
+            handleFiles(files);
+        });
+
+        function handleFiles(files) {
+            imageFiles = [...imageFiles, ...files];
+            updatePreview();
+        }
+
+        function updatePreview() {
+            imagePreview.innerHTML = '';
+            imageFiles.forEach((file, index) => {
+                const imgContainer = document.createElement('div');
+                imgContainer.className = 'relative';
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                img.className = 'w-full h-32 object-cover rounded';
+                const removeBtn = document.createElement('button');
+                removeBtn.innerHTML = '&times;';
+                removeBtn.className = 'absolute top-0 right-0 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center';
+                removeBtn.onclick = () => {
+                    imageFiles.splice(index, 1);
+                    updatePreview();
+                };
+                imgContainer.appendChild(img);
+                imgContainer.appendChild(removeBtn);
+                imagePreview.appendChild(imgContainer);
+            });
+        }
+
+        clearBtn.addEventListener('click', () => {
+            imageFiles = [];
+            imagePreview.innerHTML = '';
+            pdfOutput.classList.add('hidden');
+            pdfViewer.classList.add('hidden');
+            pdfViewer.src = '';
+        });
+
+        convertBtn.addEventListener('click', async () => {
+            if (imageFiles.length === 0) {
+                alert('Please upload at least one image.');
+                return;
+            }
+
+            const { PDFDocument } = PDFLib;
+            const pdfDoc = await PDFDocument.create();
+
+            for (const file of imageFiles) {
+                const arrayBuffer = await file.arrayBuffer();
+                const img = await (file.type === 'image/png' ? pdfDoc.embedPng(arrayBuffer) : pdfDoc.embedJpg(arrayBuffer));
+                const page = pdfDoc.addPage([img.width, img.height]);
+                page.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
+            }
+
+            const pdfBytes = await pdfDoc.save();
+            const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+            const pdfUrl = URL.createObjectURL(pdfBlob);
+
+            pdfOutput.classList.remove('hidden');
+            downloadBtn.onclick = () => saveAs(pdfBlob, 'converted.pdf');
+            viewBtn.onclick = () => {
+                pdfViewer.src = pdfUrl;
+                pdfViewer.classList.remove('hidden');
+            };
+        });
+    </script>
+</body>
+</html>
